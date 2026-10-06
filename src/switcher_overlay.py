@@ -1,7 +1,7 @@
 """Semi-transparent window switcher overlay.
 
 Shows a floating list of target application windows with the
-currently selected one highlighted. Used during long-press R key.
+currently selected one highlighted. Any window_switch button can open it.
 
 All UI operations are thread-safe via _schedule() which uses root.after()
 to marshal calls to the main thread.
@@ -74,6 +74,8 @@ class SwitcherOverlay:
 
     def show(self, windows: list[WindowInfo], initial_index: int = 0) -> None:
         """Show the overlay (thread-safe)."""
+        self._windows = windows
+        self._selected_index = initial_index % max(len(windows), 1)
         self._schedule(lambda: self._do_show(windows, initial_index))
 
     def _do_show(self, windows: list[WindowInfo], initial_index: int) -> None:

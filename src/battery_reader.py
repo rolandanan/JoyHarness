@@ -26,13 +26,11 @@ _PID_R = 0x2007  # Joy-Con R
 def battery_label(nibble: int) -> tuple[str, int]:
     """Return (status_string, percentage) from the 4-bit battery value.
 
-    Values 0x00-0x08: discharging, each step ~12.5%.
-    Values 0x09-0x0F: charging.
+    Bit 0 indicates charging; bits 1–3 encode 0/25/50/75/100 percent.
     """
-    if 0x01 <= nibble <= 0x08:
-        return ("discharging", min(nibble * 125 // 10, 100))
-    elif 0x09 <= nibble <= 0x0F:
-        return ("charging", min((nibble & 0x0F) * 125 // 10, 100))
+    level = nibble & 0x0E
+    if 0 <= nibble <= 9 and level <= 8:
+        return ("charging" if nibble & 1 else "discharging", level * 100 // 8)
     return ("unknown", -1)
 
 
@@ -61,7 +59,7 @@ def _read_battery_from_device(dev_info: dict, stop_event: threading.Event) -> tu
 
     Does NOT send any commands to the device — just drains the already-
     buffered input reports and extracts the battery nibble from the first
-    valid 0x30/0x3F frame found.  This avoids disrupting the report-mode
+    valid 0x30 frame found.  This avoids disrupting the report-mode
     state that pygame/SDL is relying on and prevents the 0% spike caused
     by sending a 'set report mode' command mid-session.
 
@@ -71,7 +69,8 @@ def _read_battery_from_device(dev_info: dict, stop_event: threading.Event) -> tu
     try:
         dev.open_path(dev_info["path"])
     except OSError as e:
-        logger.warning("Cannot open HID for battery (%s): %s", dev_info["_side"], e)
+        logger.debug("Cannot open HID for battery (%s): %s", dev_info["_side"], e)
+        _safe_close(dev)
         return None
 
     # The Joy-Con is already streaming 0x30 reports at ~60 Hz while in use.
@@ -85,7 +84,7 @@ def _read_battery_from_device(dev_info: dict, stop_event: threading.Event) -> tu
             break
         if not data or len(data) < 3:
             continue
-        if data[0] not in (0x30, 0x3F):
+        if data[0] != 0x30:
             continue
         battery_nibble = (data[2] >> 4) & 0x0F
         result = battery_label(battery_nibble)
@@ -163,6 +162,8 @@ class BatteryReader:
                     status, pct = result
                     self._set_state(side, status, pct)
                     logger.debug("Battery %s: %s %d%%", side, status, pct)
+                else:
+                    self._set_state(side, "unavailable", -1)
                 # else: could not open device — leave previous state intact;
                 # the side will be marked disconnected only when HID enumerate
                 # stops listing it (handled by the found_sides check below).

@@ -17,9 +17,15 @@ from __future__ import annotations
 
 import time
 import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import tkinter as tk
+    from .window_switcher import WindowInfo
 
 from . import keyboard_output
-from .constants import get_button_indices, get_button_names
+from .constants import get_button_names
+from .device_profiles import button_indices
 from .switcher_overlay import SwitcherOverlay
 from .window_switcher import WindowCycler, get_foreground_process_name, get_foreground_hwnd, find_windows
 
@@ -35,7 +41,10 @@ class KeyMapper:
     def __init__(self, config: dict, mode: str = "single_right") -> None:
         """Initialize with a validated config dict and connection mode."""
         self._mode = mode
-        self._button_indices = get_button_indices(mode)
+        self._long_threshold = config.get("long_press_threshold", LONG_PRESS_THRESHOLD)
+        self._ws_move_interval = config.get("switch_scroll_interval", 400) / 1000.0
+        self._stick_enabled = config.get("stick_enabled", True)
+        self._button_indices = button_indices(config, mode)
         self._button_names = get_button_names(mode)
 
         mappings = config.get("mappings", {})
@@ -74,7 +83,10 @@ class KeyMapper:
         self._long_threshold = long_threshold
 
         # Stick mapping enabled (controllable from GUI)
-        self._stick_enabled: bool = True
+        self._stick_enabled: bool = config.get("stick_enabled", True)
+        self.capture_request = None
+        self.capture_events = __import__("queue").Queue()
+        self.command_queue = __import__("queue").Queue()
 
         # Window cycler for VS Code window switching
         self._window_cycler = WindowCycler()
@@ -177,6 +189,8 @@ class KeyMapper:
 
         elif action == "window_switch":
             # Record press time and button index, decide short vs long in poll/button_up
+            if self._ws_held:
+                return
             self._ws_held = True
             self._ws_button_index = button_index
             self._ws_press_time = time.monotonic()
@@ -196,6 +210,7 @@ class KeyMapper:
         # Handle sequence release (reverse order)
         if button_index in self._active_sequences:
             self._sequence_repeat.pop(button_index, None)
+            self._active_holds.pop(button_index, None)
             keys = self._active_sequences.pop(button_index)
             for key in reversed(keys):
                 keyboard_output.release(key)
@@ -214,7 +229,7 @@ class KeyMapper:
             key, press_time = self._auto_pending.pop(button_index)
             elapsed = time.monotonic() - press_time
 
-            if elapsed < self._long_threshold:
+            if elapsed < self._long_threshold or button_index not in self._active_holds:
                 # Short press → tap
                 keyboard_output.tap(key)
                 logger.debug("auto UP [%s] → tap %s (%.0fms)", btn_name, key, elapsed * 1000)
@@ -385,7 +400,10 @@ class KeyMapper:
         """
         self.release_all()
         self._mode = mode
-        self._button_indices = get_button_indices(mode)
+        self._long_threshold = config.get("long_press_threshold", LONG_PRESS_THRESHOLD)
+        self._ws_move_interval = config.get("switch_scroll_interval", 400) / 1000.0
+        self._stick_enabled = config.get("stick_enabled", True)
+        self._button_indices = button_indices(config, mode)
         self._button_names = get_button_names(mode)
 
         mappings = config.get("mappings", {})
@@ -422,7 +440,8 @@ class KeyMapper:
         self._button_repeat.clear()
         # Release holds
         for key in self._active_holds.values():
-            keyboard_output.release(key)
+            if key != "__sequence__":
+                keyboard_output.release(key)
         self._active_holds.clear()
         self._auto_pending.clear()
 
@@ -446,7 +465,7 @@ class KeyMapper:
         if_window = mapping.get("if_window")
         if if_window:
             fg = get_foreground_process_name()
-            if fg != if_window:
+            if fg.casefold() != if_window.casefold():
                 logger.debug("macro [%s] skipped: foreground is '%s', need '%s'",
                              btn_name, fg, if_window)
                 return

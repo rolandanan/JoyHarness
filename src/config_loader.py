@@ -9,6 +9,10 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import os
+import sys
+import shutil
+from datetime import datetime
 from pathlib import Path
 
 from .constants import (
@@ -23,7 +27,11 @@ from .constants import (
 logger = logging.getLogger(__name__)
 
 
-_CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+_BUNDLED_CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+_CONFIG_DIR = _BUNDLED_CONFIG_DIR
+if getattr(sys, "frozen", False):
+    _CONFIG_DIR = (Path.home() / "Library/Application Support/JoyHarness" if sys.platform == "darwin"
+                   else Path(os.environ.get("APPDATA", str(Path.home()))) / "JoyHarness")
 USER_CONFIG_PATH = str(_CONFIG_DIR / "user.json")
 
 
@@ -39,9 +47,9 @@ def get_platform_config_path() -> str | None:
     if user.exists():
         return str(user)
     if sys.platform == "darwin":
-        plat = _CONFIG_DIR / "user-macos.json"
+        plat = _BUNDLED_CONFIG_DIR / "user-macos.json"
     else:
-        plat = _CONFIG_DIR / "user-windows.json"
+        plat = _BUNDLED_CONFIG_DIR / "user-windows.json"
     if plat.exists():
         return str(plat)
     return None
@@ -71,6 +79,9 @@ def load_config(path: str | None = None) -> dict:
 
     with open(config_path, encoding="utf-8") as f:
         user_config = json.load(f)
+    if not isinstance(user_config, dict):
+        raise ValueError("配置根节点必须为对象")
+    _check_structure(user_config)
 
     logger.info("Loaded config from: %s", config_path)
     merged = merge_with_defaults(user_config)
@@ -79,8 +90,29 @@ def load_config(path: str | None = None) -> dict:
     if errors:
         error_msg = "Invalid configuration:\n" + "\n".join(f"  - {e}" for e in errors)
         raise ValueError(error_msg)
-
+    merged["_save_path"] = USER_CONFIG_PATH if getattr(sys, "frozen", False) and config_path.parent == _BUNDLED_CONFIG_DIR else str(config_path)
     return merged
+
+
+def _check_structure(config):
+    profiles = config.get("profiles", {})
+    if not isinstance(profiles, dict):
+        raise ValueError("profiles 必须为对象")
+    containers = [config]
+    for mode, profile in profiles.items():
+        if mode not in DEFAULT_CONFIGS or not isinstance(profile, dict):
+            raise ValueError(f"无效 profile: {mode}")
+        containers.append(profile)
+    for container in containers:
+        mappings = container.get("mappings", {})
+        if not isinstance(mappings, dict) or any(not isinstance(mappings.get(key, {}), dict) for key in ("buttons", "stick_directions")):
+            raise ValueError("mappings/buttons/stick_directions 必须为对象")
+    if "active_profile" in config and config["active_profile"] not in DEFAULT_CONFIGS:
+        raise ValueError("无效 active_profile")
+    if not isinstance(config.get("known_apps", {}), dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in config.get("known_apps", {}).items()):
+        raise ValueError("known_apps 必须为名称与进程名对象")
+    if not isinstance(config.get("selected_apps", []), list) or not all(isinstance(v, str) for v in config.get("selected_apps", [])):
+        raise ValueError("selected_apps 必须为进程名列表")
 
 
 def merge_with_defaults(user_config: dict) -> dict:
@@ -95,7 +127,7 @@ def merge_with_defaults(user_config: dict) -> dict:
     result = copy.deepcopy(DEFAULT_CONFIG)
 
     # Override top-level settings
-    for key in ("version", "description", "deadzone", "poll_interval", "stick_mode", "stick_enabled", "keep_alive_enabled"):
+    for key in ("version", "description", "deadzone", "poll_interval", "stick_mode", "stick_enabled", "keep_alive_enabled", "device_profiles", "long_press_threshold", "axis_x", "axis_y", "theme"):
         if key in user_config:
             result[key] = user_config[key]
 
@@ -190,6 +222,16 @@ def validate_config(config: dict) -> list[str]:
     - Validates all profiles if present
     """
     errors: list[str] = []
+    try:
+        _check_structure(config)
+    except ValueError as error:
+        return [str(error)]
+    from .device_profiles import validate_devices
+    errors.extend(validate_devices(config.get("device_profiles", {})))
+    for field, default in (("long_press_threshold", .25), ("switch_scroll_interval", 400)):
+        value = config.get(field, default)
+        if type(value) not in (int, float) or not 0 < value <= 10000:
+            errors.append(f"{field} 必须为正数")
 
     # Top-level validation
     deadzone = config.get("deadzone", 0.15)
@@ -253,7 +295,10 @@ def _validate_mapping_entry(name: str, mapping: dict) -> list[str]:
         errors.append(f"'{name}' has invalid action '{action}', must be one of {VALID_ACTIONS}")
         return errors
 
-    if action in ("tap", "hold"):
+    repeat = mapping.get("repeat", 0)
+    if type(repeat) not in (int, float) or repeat < 0:
+        errors.append(f"'{name}' repeat 必须为非负数")
+    if action in ("tap", "hold", "auto"):
         key = mapping.get("key")
         if not isinstance(key, str):
             errors.append(f"'{name}' action '{action}' requires a 'key' string")
@@ -271,6 +316,30 @@ def _validate_mapping_entry(name: str, mapping: dict) -> list[str]:
                 elif not _is_valid_key(key):
                     errors.append(f"'{name}' has invalid key name in combination: '{key}'")
 
+    elif action == "exec":
+        command = mapping.get("command")
+        if not (isinstance(command, str) and command.strip() or isinstance(command, list) and command and all(isinstance(c, str) and c for c in command)):
+            errors.append(f"'{name}' exec 需要命令字符串或参数列表")
+    elif action == "macro":
+        steps = mapping.get("steps")
+        if not isinstance(steps, list) or not steps:
+            errors.append(f"'{name}' macro 需要非空 steps")
+        else:
+            for step in steps:
+                if not isinstance(step, dict):
+                    errors.append(f"'{name}' 无效宏步骤")
+                elif step.get("type") in ("tap", "hold", "release"):
+                    errors.extend(_validate_mapping_entry(name, {"action": "tap", "key": step.get("key")}))
+                elif step.get("type") == "combination":
+                    errors.extend(_validate_mapping_entry(name, {"action": "combination", "keys": step.get("keys")}))
+                elif step.get("type") == "delay":
+                    if type(step.get("ms")) not in (int, float) or not 0 <= step["ms"] <= 60000:
+                        errors.append(f"'{name}' 无效延时")
+                elif step.get("type") == "type":
+                    if not isinstance(step.get("text"), str):
+                        errors.append(f"'{name}' 无效文本")
+                else:
+                    errors.append(f"'{name}' 未知宏步骤")
     return errors
 
 
@@ -287,10 +356,28 @@ def save_config(config: dict, path: str | None = None) -> None:
         config: The complete configuration dict to save.
         path: Target file path. Defaults to USER_CONFIG_PATH.
     """
-    target = Path(path) if path else Path(USER_CONFIG_PATH)
+    target = Path(path or config.get("_save_path", USER_CONFIG_PATH))
     target.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(target, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
+    errors = validate_config(config)
+    if errors:
+        raise ValueError("\n".join(errors))
+    if target.exists():
+        backup_config(str(target))
+    payload = copy.deepcopy(config)
+    payload.pop("device_identity", None)
+    payload.pop("runtime_devices", None)
+    payload.pop("_save_path", None)
+    temporary = target.with_suffix(".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(target)
 
     logger.info("Config saved to: %s", target)
+
+
+def backup_config(path=None):
+    source = Path(path or USER_CONFIG_PATH)
+    directory = source.parent / "backups"
+    directory.mkdir(parents=True, exist_ok=True)
+    target = directory / f"{source.stem}-{datetime.now():%Y%m%d-%H%M%S-%f}.json"
+    shutil.copy2(source, target)
+    return target

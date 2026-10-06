@@ -22,3 +22,12 @@ config/user.json
 .vscode/
 .idea/
 .DS_Store
+
+# Personal configuration backups
+backups/
+config/backups/
+*.bak
+*.backup-*
+.pytest_cache/
+.ruff_cache/
+build-packaging.log

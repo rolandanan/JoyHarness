@@ -28,7 +28,7 @@ def apply_deadzone(x: float, y: float, deadzone: float) -> tuple[float, float]:
     """
     magnitude = math.sqrt(x * x + y * y)
 
-    if magnitude < deadzone:
+    if magnitude == 0 or magnitude < deadzone:
         return (0.0, 0.0)
 
     # Rescale: map [deadzone, 1.0] → [0.0, 1.0] linearly

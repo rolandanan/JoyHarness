@@ -354,7 +354,7 @@ class WindowCycler:
 
     def __init__(self, app_names: list[str] | None = None) -> None:
         default = ["code.exe"] if sys.platform == "win32" else ["Code"]
-        self._app_names: list[str] = app_names or default
+        self._app_names: list[str] = default if app_names is None else app_names
         self._windows: list[WindowInfo] = []
         self._current_index: int = -1
 

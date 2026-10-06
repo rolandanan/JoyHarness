@@ -234,47 +234,19 @@ def generate_output(
     right_axis, right_sign = axis_map.get("right", (0, 1.0))
     up_axis, up_sign = axis_map.get("up", (1, -1.0))
 
-    # 按钮 short name 映射
-    btn_short = {}
-    for full_name, idx in button_mapping.items():
-        for short in ["A", "B", "X", "Y", "R", "ZR", "Plus", "Minus", "Home", "Capture", "RStick", "SL", "SR"]:
-            if short.lower() in full_name.lower() or short == full_name.split(" ")[0]:
-                btn_short[short] = idx
-                break
-
-    # 生成 BUTTON_NAMES 常量
-    print("\n--- 请更新 src/constants.py 中的按钮索引 ---\n")
-    print("# 校准结果 - 请替换 constants.py 中对应的常量:")
-    for name, idx in sorted(btn_short.items(), key=lambda x: x[1]):
-        const_name = {
-            "A": "BTN_A", "B": "BTN_B", "X": "BTN_X", "Y": "BTN_Y",
-            "R": "BTN_R", "ZR": "BTN_ZR", "Plus": "BTN_PLUS", "Minus": "BTN_MINUS",
-            "Home": "BTN_HOME", "Capture": "BTN_CAPTURE", "RStick": "BTN_RSTICK",
-            "SL": "BTN_SL", "SR": "BTN_SR",
-        }.get(name, f"BTN_{name.upper()}")
-        print(f"{const_name} = {idx}")
-
-    print(f"\nAXIS_RSTICK_X = {right_axis}")
-    print(f"AXIS_RSTICK_Y = {up_axis}")
-
-    # 生成 JSON 映射摘要
-    result = {
-        "buttons": {name: idx for name, idx in sorted(btn_short.items(), key=lambda x: x[1])},
-        "axes": {
-            "stick_x": right_axis,
-            "stick_y": up_axis,
-            "x_sign": right_sign,
-            "y_sign": up_sign,
-        },
-    }
-
-    output_path = Path(__file__).parent / "calibration_result.json"
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=2, ensure_ascii=False)
-
-    print(f"\n校准结果已保存到: {output_path}")
-    print("请根据上面的索引值更新 src/constants.py")
-    print("然后运行: python src/main.py --discover 快速验证")
+    names = ["A", "B", "X", "Y", "R", "ZR", "Plus", "Home", "RStick", "SL", "SR"]
+    btn_short = {name: button_mapping[label] for name, label in zip(names, CALIBRATION_BUTTONS)}
+    from src.config_loader import load_config, get_platform_config_path, save_config
+    from src.device_profiles import device_key
+    config = load_config(get_platform_config_path())
+    identity = device_key(pygame.joystick.Joystick(_selected_index))
+    config.setdefault("device_profiles", {})[identity] = {
+        "buttons": {"single_right": btn_short},
+        "axes": {"x": right_axis, "y": up_axis,
+                 "x_sign": 1 if right_sign > 0 else -1,
+                 "y_sign": -1 if up_sign > 0 else 1}}
+    save_config(config)
+    print("设备校准已保存，无需修改源码。推荐使用应用内设备校准。")
 
 
 def main():
@@ -310,6 +282,8 @@ def main():
             except ValueError:
                 print("  请输入一个有效的数字。")
 
+    global _selected_index
+    _selected_index = js_index
     joystick = pygame.joystick.Joystick(js_index)
     print(f"\n使用: {joystick.get_name()}")
 

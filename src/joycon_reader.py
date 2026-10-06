@@ -83,49 +83,15 @@ def detect_connection_mode() -> str:
     Returns:
         One of "single_left", "single_right", or "dual".
     """
-    count = pygame.joystick.get_count()
-
-    if count == 0:
-        return "single_right"
-
-    has_left = False
-    has_right = False
-
-    for i in range(count):
+    from .controller_runtime import device_mode
+    sides = set()
+    for i in range(pygame.joystick.get_count()):
         js = pygame.joystick.Joystick(i)
-        name = js.get_name().lower()
-
-        # Skip non-Joy-Con devices
-        if not any(kw in name for kw in ("joy-con", "joy con", "switch", "pro controller")):
-            continue
-
-        # Check for combined device (contains both "l" and "r")
-        if "l" in name and "r" in name:
-            logger.debug("Detected combined Joy-Con device: %s", js.get_name())
-            return "dual"
-
-        if "l" in name:
-            has_left = True
-        elif "r" in name:
-            has_right = True
-        else:
-            # Unidentified side — check number of buttons as heuristic
-            # Combined devices typically have 20+ buttons
-            if js.get_numbuttons() >= 18:
-                logger.debug("Detected combined Joy-Con device (high button count): %s", js.get_name())
-                return "dual"
-            # Default to right if single device
-            has_right = True
-
-    if has_left and has_right:
-        logger.debug("Detected both L and R Joy-Cons (separate devices)")
+        if any(word in js.get_name().lower() for word in ("joy-con", "joy con", "switch", "pro controller")):
+            sides.add(device_mode(js.get_name()))
+    if "dual" in sides or len(sides) > 1:
         return "dual"
-    elif has_left:
-        logger.debug("Detected single left Joy-Con")
-        return "single_left"
-    else:
-        logger.debug("Detected single right Joy-Con")
-        return "single_right"
+    return next(iter(sides), "single_right")
 
 
 def run_discover_mode(joystick_index: int | None = None) -> None:

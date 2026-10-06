@@ -13,42 +13,49 @@
         "key": "enter"
       },
       "B": {
-        "action": "auto",
-        "key": "backspace",
-        "repeat": 100
-      },
-      "X": {
         "action": "tap",
         "key": "escape"
+      },
+      "X": {
+        "action": "combination",
+        "keys": [
+          "command",
+          "c"
+        ]
       },
       "Y": {
         "action": "combination",
         "keys": [
-          "cmd",
-          "tab"
+          "command",
+          "v"
         ]
       },
       "R": {
-        "action": "exec",
-        "command": [
-          "open",
-          "-a",
-          "Mission Control"
+        "action": "combination",
+        "keys": [
+          "control",
+          "q"
         ]
       },
       "ZR": {
-        "action": "hold",
-        "key": "alt_r"
+        "action": "combination",
+        "keys": [
+          "option",
+          "a"
+        ]
       },
       "Plus": {
-        "action": "hold",
-        "key": "cmd_r"
+        "action": "combination",
+        "keys": [
+          "command",
+          "a"
+        ]
       },
       "Home": {
         "action": "combination",
         "keys": [
-          "cmd",
-          "space"
+          "command",
+          "z"
         ]
       },
       "RStick": {
@@ -66,12 +73,12 @@
     "stick_directions": {
       "up": {
         "action": "auto",
-        "key": "down",
+        "key": "up",
         "repeat": 100
       },
       "down": {
         "action": "auto",
-        "key": "up",
+        "key": "down",
         "repeat": 100
       },
       "left": {
@@ -102,42 +109,49 @@
             "key": "enter"
           },
           "B": {
-            "action": "auto",
-            "key": "backspace",
-            "repeat": 100
-          },
-          "X": {
             "action": "tap",
             "key": "escape"
+          },
+          "X": {
+            "action": "combination",
+            "keys": [
+              "command",
+              "c"
+            ]
           },
           "Y": {
             "action": "combination",
             "keys": [
-              "cmd",
-              "tab"
+              "command",
+              "v"
             ]
           },
           "R": {
-            "action": "exec",
-            "command": [
-              "open",
-              "-a",
-              "Mission Control"
+            "action": "combination",
+            "keys": [
+              "control",
+              "q"
             ]
           },
           "ZR": {
-            "action": "hold",
-            "key": "alt_r"
+            "action": "combination",
+            "keys": [
+              "option",
+              "a"
+            ]
           },
           "Plus": {
-            "action": "hold",
-            "key": "cmd_r"
+            "action": "combination",
+            "keys": [
+              "command",
+              "a"
+            ]
           },
           "Home": {
             "action": "combination",
             "keys": [
-              "cmd",
-              "space"
+              "command",
+              "z"
             ]
           },
           "RStick": {
@@ -155,12 +169,12 @@
         "stick_directions": {
           "up": {
             "action": "auto",
-            "key": "down",
+            "key": "up",
             "repeat": 100
           },
           "down": {
             "action": "auto",
-            "key": "up",
+            "key": "down",
             "repeat": 100
           },
           "left": {
@@ -362,5 +376,6 @@
       }
     }
   },
-  "active_profile": "single_right"
+  "active_profile": "single_right",
+  "theme": "litera"
 }

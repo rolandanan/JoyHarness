@@ -1,5 +1,6 @@
 #!/bin/bash
-# JoyHarness macOS launcher
-# Double-click this file to start JoyHarness.
 cd "$(dirname "$0")"
-python3 src/main.py "$@"
+if [ -x .venv/bin/python ]; then
+  exec .venv/bin/python -m src "$@"
+fi
+exec python3 -m src "$@"

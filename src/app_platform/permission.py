@@ -49,13 +49,23 @@ def _check_windows_admin() -> bool:
 def _check_macos_accessibility() -> bool:
     """Check macOS Accessibility permission by attempting a pynput operation."""
     try:
-        import subprocess
-        result = subprocess.run(
-            ["osascript", "-e", 'tell application "System Events" to key code 0'],
-            capture_output=True,
-            timeout=3,
-        )
-        return result.returncode == 0
-    except Exception:
-        logger.debug("Accessibility check failed, assuming not granted")
+        from ApplicationServices import AXIsProcessTrusted
+        return bool(AXIsProcessTrusted())
+    except ImportError:
         return False
+
+
+def input_monitoring_status():
+    if sys.platform != "darwin":
+        return None
+    try:
+        from Quartz import CGPreflightListenEventAccess
+        return bool(CGPreflightListenEventAccess())
+    except ImportError:
+        return None
+
+
+def open_permission_settings(kind="Accessibility"):
+    if sys.platform == "darwin":
+        import subprocess
+        subprocess.Popen(["open", f"x-apple.systempreferences:com.apple.preference.security?Privacy_{kind}"])

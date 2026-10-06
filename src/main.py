@@ -50,7 +50,7 @@ from .gui import MainWindow
 from .joycon_reader import find_joycon, detect_connection_mode, run_discover_mode, run_polling_loop, wait_for_reconnection
 from .keep_alive import KeepAliveManager
 from .key_mapper import KeyMapper
-from .platform.permission import has_required_permissions, get_permission_warning
+from .app_platform.permission import has_required_permissions, get_permission_warning
 from .tray_icon import create_tray_icon, run_tray
 
 logger = logging.getLogger(__name__)
@@ -150,6 +150,7 @@ Examples:
         action="version",
         version=f"NSJC {__import__('src.constants', fromlist=['__version__']).__version__}",
     )
+    parser.add_argument("--smoke-test", action="store_true", help="Open GUI briefly and exit without writing configuration or sending keys")
     parser.add_argument(
         "--no-admin-warn",
         action="store_true",
@@ -189,6 +190,10 @@ def main() -> None:
     handlers: list[logging.Handler] = [
         logging.StreamHandler(),
     ]
+    if getattr(sys, "frozen", False):
+        log_path = Path(USER_CONFIG_PATH).parent / "joyharness.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
     if args.verbose:
         log_path = Path(__file__).resolve().parent.parent / "nsjc.log"
         handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
@@ -242,11 +247,10 @@ def main() -> None:
     if js is None:
         print("No Joy-Con detected.")
         print(_get_pairing_instructions())
-        pygame.quit()
-        sys.exit(1)
 
-    print(f"Controller: {js.get_name()}")
-    print(f"Buttons: {js.get_numbuttons()}, Axes: {js.get_numaxes()}")
+    if js is not None:
+        print(f"Controller: {js.get_name()}")
+        print(f"Buttons: {js.get_numbuttons()}, Axes: {js.get_numaxes()}")
 
     # Detect connection mode and load the appropriate profile
     connection_mode = detect_connection_mode()
@@ -271,7 +275,7 @@ def main() -> None:
 
     # Initialize WindowCycler with selected apps from config
     selected_apps = config.get("selected_apps")
-    if selected_apps:
+    if selected_apps is not None:
         key_mapper._window_cycler.app_names = selected_apps
 
     # Start battery reader
@@ -297,7 +301,15 @@ def main() -> None:
         args=(js, key_mapper, config, stop_event, gui.update_connection_mode),
         daemon=True,
     )
-    poll_thread.start()
+    if not args.smoke_test:
+        poll_thread.start()
+    else:
+        def finish_smoke():
+            stop_event.set()
+            gui.root.destroy()
+        gui.root.after(400, gui._open_settings)
+        gui.root.after(800, gui._edit_selected)
+        gui.root.after(2000, finish_smoke)
 
     # Start tray icon in background thread (Windows only)
     # macOS: pystray requires NSApplication.run on the main thread, which
@@ -323,7 +335,8 @@ def main() -> None:
     stop_event.set()
     if icon is not None:
         icon.stop()
-    poll_thread.join(timeout=2.0)
+    if poll_thread.ident is not None:
+        poll_thread.join(timeout=2.0)
     battery_reader.join(timeout=2.0)
     keep_alive_manager.join(timeout=2.0)
     key_mapper.release_all()
@@ -341,7 +354,8 @@ def _run_polling(
 ) -> None:
     """Run polling loop in a background thread, handling exceptions."""
     try:
-        run_polling_loop(joystick, key_mapper, config, stop_event, on_mode_change=on_mode_change)
+        from .controller_runtime import run_controllers
+        run_controllers(key_mapper, config, stop_event, on_mode_change=on_mode_change)
     except Exception:
         logger.exception("Polling thread error")
 
