@@ -17,6 +17,14 @@ logger = logging.getLogger(__name__)
 
 _held_keys: set[str] = set()
 
+
+def _windows_key(key_name):
+    aliases = {"command": "windows", "cmd": "windows", "cmd_l": "left windows",
+               "cmd_r": "right windows", "option": "alt", "control": "ctrl",
+               "alt_l": "left alt", "alt_r": "right alt", "ctrl_l": "left ctrl",
+               "ctrl_r": "right ctrl", "shift_l": "left shift", "shift_r": "right shift"}
+    return aliases.get(key_name.lower().strip(), key_name)
+
 # ---------------------------------------------------------------------------
 # Backend selection
 # ---------------------------------------------------------------------------
@@ -128,9 +136,6 @@ if sys.platform == "darwin":
 
 else:
     import keyboard as _keyboard
-
-    def _windows_key(key_name):
-        return {"command": "windows", "cmd": "windows", "cmd_r": "right windows", "option": "alt", "control": "ctrl"}.get(key_name.lower().strip(), key_name)
 
     def _do_press(key_name: str) -> None:
         _keyboard.press(_windows_key(key_name))

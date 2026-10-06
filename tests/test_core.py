@@ -137,6 +137,8 @@ def test_invalid_mapping(config, mapping):
 def test_alias(config):
     assert all(keyboard_output.is_valid_key(k) for k in ['command','cmd','option','alt','control','ctrl','shift'])
     assert action_label({'action':'combination','keys':['command','option','a']}) == '⌘ + ⌥ + A'
+    assert keyboard_output._windows_key('alt_r') == 'right alt'
+    assert keyboard_output._windows_key('ctrl_l') == 'left ctrl'
 
 
 def test_device_side_and_dual():
