@@ -15,32 +15,25 @@ import time
 os.environ.setdefault("SDL_JOYSTICK_HIDAPI_COMBINE_JOY_CONS", "0")
 
 import pygame
-from pynput.keyboard import Controller, Key
+from src import keyboard_output
 
 # Button → key mapping (subset of DEFAULT_MAPPINGS for quick test)
 BUTTON_MAP = {
-    1: ("A", "enter"),
-    3: ("B", "tab"),
-    0: ("X", "f2"),
-    2: ("Y", None),       # sequence, skip for now
+    0: ("A", "enter"),
+    2: ("B", "escape"),
+    1: ("X", None),
+    3: ("Y", None),       # sequence, skip for now
     6: ("Plus", None),    # combination, skip for now
     7: ("RStick", "tab"),
 }
 
-keyboard = Controller()
+
 
 
 def tap_key(key_name: str) -> None:
     """Simulate a key tap via pynput."""
     try:
-        # Try as special Key enum first
-        k = getattr(Key, key_name, None)
-        if k is not None:
-            keyboard.press(k)
-            keyboard.release(k)
-        else:
-            keyboard.press(key_name)
-            keyboard.release(key_name)
+        keyboard_output.tap(key_name)
         print(f"  → sent key: {key_name}")
     except Exception as e:
         print(f"  ✗ failed to send key '{key_name}': {e}")

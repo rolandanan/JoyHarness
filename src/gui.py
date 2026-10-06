@@ -56,7 +56,7 @@ class MainWindow(ResizableMixin):
         self._root = ttk.Window(
             title="JoyHarness · 工作台",
             themename=config.get("theme", "litera"),
-            size=(1000, 840),
+            size=(1000, 900),
             resizable=(True, True),
         )
         self._root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -221,7 +221,7 @@ class MainWindow(ResizableMixin):
         style.configure("TLabel", foreground=foreground, font=(_UI_FONT, 12))
         style.configure("Muted.TLabel", foreground=muted, font=(_UI_FONT, 12))
         style.configure("secondary.TLabel", foreground=muted)
-        style.configure("Workflow.Treeview", rowheight=28, font=(_UI_FONT, 12))
+        style.configure("Workflow.Treeview", rowheight=26, font=(_UI_FONT, 11))
         style.configure("Workflow.Treeview.Heading", font=(_UI_FONT, 12, "bold"), padding=(6, 6))
 
     def _save_button_mapping(self, button, value):

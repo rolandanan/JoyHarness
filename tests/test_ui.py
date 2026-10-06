@@ -24,7 +24,7 @@ def test_workbench_editor_and_settings(tmp_path):
         gui._refresh_status()
         assert len(gui._mapping_table.get_children()) == 11
         assert str(gui._mapping_table.column('target', 'anchor')) == 'center'
-        assert int(gui.root.style.lookup('Workflow.Treeview', 'rowheight')) == 28
+        assert int(gui.root.style.lookup('Workflow.Treeview', 'rowheight')) == 26
         gui._switch_button.set('RStick')
         gui._bind_window_switch()
         mapper.command_queue.get_nowait()()
