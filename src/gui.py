@@ -123,6 +123,13 @@ class MainWindow(ResizableMixin):
         for label, variable, command in (("摇杆映射", self._stick_var, self._on_stick_toggle), ("保持手柄唤醒", self._keep_alive_var, self._on_keep_alive_toggle), ("登录时自动启动", self._login_var, self._on_login_toggle)):
             ttk.Checkbutton(options, text=label, variable=variable, command=command, bootstyle="success-round-toggle").pack(side=LEFT, padx=8, pady=4)
         ttk.Button(options, text="暂停 / 恢复映射", command=lambda: self.controller.toggle_pause(), bootstyle="secondary-outline").pack(side=LEFT, padx=4)
+        if sys.platform == "darwin":
+            self._dock_var = ttk.BooleanVar(value=self._config.get("hide_dock_icon", False))
+            dock_options = ttk.Frame(control)
+            dock_options.pack(fill=X)
+            ttk.Checkbutton(dock_options, text="隐藏 Dock 图标", variable=self._dock_var,
+                            command=lambda: self.controller.menu_bar.toggle_dock(),
+                            bootstyle="success-round-toggle").pack(side=LEFT, padx=4)
         self._theme_var = ttk.StringVar(value={"darkly": "深色", "litera": "浅色"}.get(self._config.get("theme"), "跟随系统"))
         theme = ttk.Combobox(options, textvariable=self._theme_var, values=("跟随系统", "浅色", "深色"), state="readonly", width=7)
         theme.pack(side=LEFT, padx=8, pady=4)
@@ -204,6 +211,8 @@ class MainWindow(ResizableMixin):
             state = "输入监控待授权 · 可在下方打开系统设置"
         from .autostart import is_enabled
         self._login_var.set(is_enabled())
+        if hasattr(self, "_dock_var"):
+            self._dock_var.set(self._config.get("hide_dock_icon", False))
         paused = getattr(getattr(self, "controller", None), "paused", False)
         prefix = "映射暂停" if paused else "后台运行中"
         self._runtime_label.configure(text=f"{prefix} · 输入监听：{state}  {runtime.get('error', '')}")
@@ -247,6 +256,8 @@ class MainWindow(ResizableMixin):
             set_enabled(self._login_var.get())
         except OSError as error:
             self._login_var.set(is_enabled())
+        if hasattr(self, "_dock_var"):
+            self._dock_var.set(self._config.get("hide_dock_icon", False))
             messagebox.showerror("登录启动失败", str(error), parent=self._root)
 
     def _change_theme(self, event=None):

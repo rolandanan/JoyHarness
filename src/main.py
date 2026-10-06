@@ -330,12 +330,18 @@ def main() -> None:
                 menu_bar.show()
                 assert not stop_event.is_set()
                 assert gui.root.state() == "normal"
-                quit_item = menu_bar.menu.itemAtIndex_(menu_bar.menu.numberOfItems() - 1)
-                menu_bar.actions.invoke_(quit_item)
+                menu_bar.menu.performActionForItemAtIndex_(menu_bar.menu.numberOfItems() - 1)
                 logger.info("Lifecycle smoke passed: hide, menu item, reopen, native Quit action")
             else:
                 controller.shutdown()
-        gui.root.after(400, gui._open_settings)
+        def native_settings_smoke():
+            if menu_bar is not None:
+                settings_index = next(i for i in range(menu_bar.menu.numberOfItems())
+                                      if menu_bar.menu.itemAtIndex_(i).title() == "设置与校准")
+                menu_bar.menu.performActionForItemAtIndex_(settings_index)
+            else:
+                gui._open_settings()
+        gui.root.after(400, native_settings_smoke)
         gui.root.after(800, gui._edit_selected)
         gui.root.after(2000, finish_smoke)
 
@@ -344,6 +350,7 @@ def main() -> None:
     if sys.platform == "darwin":
         from .macos_menu import MacMenuBar
         menu_bar = MacMenuBar(controller)
+        controller.menu_bar = menu_bar
         if args.background:
             gui.root.withdraw()
     else:

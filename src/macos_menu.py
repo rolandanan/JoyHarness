@@ -2,18 +2,21 @@
 from AppKit import NSStatusBar, NSVariableStatusItemLength, NSMenu, NSMenuItem, NSApplication
 from Foundation import NSObject
 import objc
+import queue
 from .autostart import is_enabled
 
 class MenuActions(NSObject):
     @objc.IBAction
     def invoke_(self, sender):
-        self.root.after(0, self.callbacks[sender.tag()])
+        # Native menu tracking re-enters Cocoa while Tk has released the GIL.
+        # Never call Tcl/Tk here, including after(): drain from a Tk timer.
+        self.pending.put(self.callbacks[sender.tag()])
 
 class MacMenuBar:
     def __init__(self, controller):
         self.controller = controller
         self.actions = MenuActions.alloc().init()
-        self.actions.root = controller.gui.root
+        self.actions.pending = queue.SimpleQueue()
         self.actions.callbacks = {}
         self.item = NSStatusBar.systemStatusBar().statusItemWithLength_(NSVariableStatusItemLength)
         self.item.button().setTitle_('JH')
@@ -28,10 +31,13 @@ class MacMenuBar:
         self.pause = self.add('暂停手柄映射', controller.toggle_pause)
         self.add('设置与校准', self.settings)
         self.login = self.add('登录时自动启动', self.toggle_login)
+        self.dock = self.add('隐藏 Dock 图标', self.toggle_dock)
         self.menu.addItem_(NSMenuItem.separatorItem())
         self.add('退出 JoyHarness', controller.shutdown)
         self.item.setMenu_(self.menu)
         self.refresh()
+        self.apply_dock_policy()
+        controller.gui.root.after(50, self.drain_actions)
 
     def add(self, title, callback=None):
         item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, 'invoke:' if callback else None, '')
@@ -43,6 +49,29 @@ class MacMenuBar:
             item.setTarget_(self.actions)
         self.menu.addItem_(item)
         return item
+
+    def drain_actions(self):
+        while not self.actions.pending.empty() and not self.controller.closing:
+            callback = self.actions.pending.get()
+            try:
+                callback()
+            except Exception:
+                import sys
+                self.controller.gui.root.report_callback_exception(*sys.exc_info())
+        if not self.controller.closing:
+            self.controller.gui.root.after(50, self.drain_actions)
+
+    def apply_dock_policy(self):
+        from AppKit import NSApplicationActivationPolicyAccessory, NSApplicationActivationPolicyRegular
+        policy = NSApplicationActivationPolicyAccessory if self.controller.config.get('hide_dock_icon', False) else NSApplicationActivationPolicyRegular
+        NSApplication.sharedApplication().setActivationPolicy_(policy)
+
+    def toggle_dock(self):
+        from .config_loader import save_config
+        c = self.controller
+        c.config['hide_dock_icon'] = not c.config.get('hide_dock_icon', False)
+        self.apply_dock_policy()
+        save_config(c.config)
 
     def show(self):
         NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
@@ -66,6 +95,7 @@ class MacMenuBar:
         states = c.gui._battery_reader.get_state() if c.gui._battery_reader else {}
         self.battery.setTitle_('电量：' + (' / '.join(f'{side} {pct}%' for side, (_, pct) in states.items() if pct >= 0) or '不可用'))
         self.login.setState_(int(is_enabled()))
+        self.dock.setState_(int(c.config.get("hide_dock_icon", False)))
         if not c.closing:
             c.gui.root.after(1000, self.refresh)
 
