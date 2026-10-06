@@ -9,6 +9,9 @@ def device_key(joystick):
 
 def button_indices(config, mode, identity=None):
     defaults = dict(get_button_indices(mode))
+    if sys.platform == "win32" and mode == "single_right":
+        # Keep upstream Windows SDL fallback; macOS defaults reflect user calibration.
+        defaults.update({"A": 1, "X": 0, "B": 3, "Y": 2, "R": 16, "ZR": 18})
     saved = config.get("device_profiles", {}).get(identity or config.get("device_identity", ""), {})
     defaults.update(saved.get("buttons", {}).get(mode, {}))
     return defaults

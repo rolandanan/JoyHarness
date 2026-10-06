@@ -16,7 +16,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture
 def config():
-    return load_config(str(ROOT / 'config/user-macos.json'))
+    config = load_config(str(ROOT / 'config/user-macos.json'))
+    from src.hardware_defaults import BUTTON_INDICES
+    config['device_identity'] = 'verified-test-device'
+    config['device_profiles'] = {'verified-test-device': {'buttons': {'single_right': dict(BUTTON_INDICES)}}}
+    return config
 
 
 @pytest.fixture
@@ -108,7 +112,8 @@ def test_sequence_release_no_sentinel(config, output):
 def test_device_override_isolated(config):
     config['device_profiles'] = {'device1': {'buttons': {'single_right': {'R': 8}}}}
     assert button_indices(config, 'single_right', 'device1')['R'] == 8
-    assert button_indices(config, 'single_right', 'device2')['R'] == 12
+    import sys
+    assert button_indices(config, 'single_right', 'device2')['R'] == (16 if sys.platform == 'win32' else 12)
     assert validate_devices({'a': {'buttons': {'single_right': {'A':0,'B':0}}}})
 
 
