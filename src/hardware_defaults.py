@@ -10,12 +10,12 @@ Three connection modes are supported:
 - dual:         Both Joy-Cons connected (as a combined SDL2 device)
 """
 
-# === Right Joy-Con Button Indices (calibrated 2026-04-09) ===
+# === Right Joy-Con Button Indices (SDL fallback; calibrate before use) ===
 # Face buttons
-BTN_X = 1
-BTN_A = 0
-BTN_Y = 3
-BTN_B = 2
+BTN_X = 0
+BTN_A = 1
+BTN_Y = 2
+BTN_B = 3
 
 # System / Home
 BTN_HOME = 5    # Home (圆形)
@@ -24,9 +24,9 @@ BTN_RSTICK = 7  # 摇杆按下
 
 # Shoulder / trigger
 BTN_SL = 9      # SL (侧边左)
-BTN_R = 12
+BTN_R = 16
 BTN_SR = 10     # SR (侧边右)
-BTN_ZR = 14
+BTN_ZR = 18
 
 # === Left Joy-Con Button Indices (PLACEHOLDER — run --discover to calibrate) ===
 BTN_L_Y = 0       # Y

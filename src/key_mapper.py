@@ -81,6 +81,7 @@ class KeyMapper:
         self._button_repeat: dict[int, dict] = {}
 
         self._long_threshold = long_threshold
+        self._stick_repeat_delay = config.get("stick_repeat_delay", 400) / 1000.0
 
         # Stick mapping enabled (controllable from GUI)
         self._stick_enabled: bool = config.get("stick_enabled", True)
@@ -323,9 +324,10 @@ class KeyMapper:
         # Stick direction repeat (e.g., arrow key every 100ms while held)
         for k in list(self._stick_repeat.keys()):
             info = self._stick_repeat[k]
-            if now - info["last_time"] >= info["interval"]:
+            if now - info["last_time"] >= info.get("initial_delay", info["interval"]):
                 keyboard_output.tap(info["key"])
                 info["last_time"] = now
+                info.pop("initial_delay", None)
                 logger.debug("stick repeat [%s] → %s", k[1], info["key"])
 
         # Window switch: long press → show overlay and cycle
@@ -369,17 +371,23 @@ class KeyMapper:
         if action == "tap":
             keyboard_output.tap(mapping["key"])
             logger.debug("stick [%s] → %s", direction, mapping["key"])
+        elif action == "hold":
+            keyboard_output.press(mapping["key"])
+            self._active_holds[("stick", direction)] = mapping["key"]
+            logger.debug("stick hold [%s] → %s", direction, mapping["key"])
         elif action == "auto":
             key = mapping["key"]
             repeat_ms = mapping.get("repeat", 100)
             # Tap once immediately, then repeat at interval via poll()
             keyboard_output.tap(key)
             self._active_holds[("stick", direction)] = key
-            self._stick_repeat[("stick", direction)] = {
-                "key": key,
-                "interval": repeat_ms / 1000.0,
-                "last_time": time.monotonic(),
-            }
+            if repeat_ms > 0:
+                self._stick_repeat[("stick", direction)] = {
+                    "key": key,
+                    "interval": repeat_ms / 1000.0,
+                    "last_time": time.monotonic(),
+                    "initial_delay": max(self._stick_repeat_delay, repeat_ms / 1000.0),
+                }
             logger.debug("stick auto [%s] → %s (repeat=%dms)", direction, key, repeat_ms)
         elif action == "combination":
             keyboard_output.send_combination(mapping["keys"])
@@ -401,6 +409,7 @@ class KeyMapper:
         self.release_all()
         self._mode = mode
         self._long_threshold = config.get("long_press_threshold", LONG_PRESS_THRESHOLD)
+        self._stick_repeat_delay = config.get("stick_repeat_delay", 400) / 1000.0
         self._ws_move_interval = config.get("switch_scroll_interval", 400) / 1000.0
         self._stick_enabled = config.get("stick_enabled", True)
         self._button_indices = button_indices(config, mode)

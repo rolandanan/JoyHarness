@@ -19,7 +19,7 @@ class SettingsWindow:
         self._key_mapper, self._config = key_mapper, config
         self._window_cycler, self._main_window, self._mode = window_cycler, main_window, mode
         self._draft = copy.deepcopy(config)
-        self._win = ttk.Toplevel(parent)
+        self._win = ttk.Toplevel(master=parent)
         self._win.title("JoyHarness · 设置")
         self._win.geometry("900x740")
         self._win.minsize(760, 560)
@@ -27,6 +27,8 @@ class SettingsWindow:
         self._rows = {}
         self._app_rows = []
         self._build_ui()
+        from .dialogs import present_dialog
+        present_dialog(self._win, parent)
         self._win.after(100, self._capture_poll)
 
     def _build_ui(self):
@@ -77,7 +79,7 @@ class SettingsWindow:
             ttk.Label(parent, text=action_label(mapping), bootstyle="secondary").pack(anchor="w", padx=36, pady=(0, 4))
 
     def _advanced(self, name):
-        win = ttk.Toplevel(self._win)
+        win = ttk.Toplevel(master=self._win)
         win.title(f"{name} · 完整动作 JSON")
         win.geometry("640x450")
         editor = tk.Text(win, font=("Menlo", 12))
@@ -189,13 +191,18 @@ class SettingsWindow:
 
     def _build_general(self, parent):
         self._params = {}
-        for field, label, default in (("long_press_threshold", "长按阈值（秒）", .25), ("switch_scroll_interval", "长按窗口选择速度（毫秒）", 400), ("deadzone", "摇杆死区（0–0.99）", .2)):
+        for field, label, default in (("long_press_threshold", "长按阈值（秒）", .25), ("switch_scroll_interval", "长按窗口选择速度（毫秒）", 400), ("deadzone", "摇杆死区（0–0.99）", .2), ("stick_repeat_delay", "摇杆首次连发等待（毫秒）", 400)):
             row = ttk.Frame(parent)
             row.pack(fill="x", pady=8)
             ttk.Label(row, text=label, width=34).pack(side="left")
             var = ttk.StringVar(value=str(self._draft.get(field, default)))
             ttk.Entry(row, textvariable=var, width=12).pack(side="left")
             self._params[field] = var
+        self._stick_inversions = {}
+        for field, label in (("right_stick_invert_x", "右摇杆左右反转"), ("right_stick_invert_y", "右摇杆上下反转")):
+            var = ttk.BooleanVar(value=self._draft.get(field, False))
+            ttk.Checkbutton(parent, text=label, variable=var).pack(anchor="w", pady=4)
+            self._stick_inversions[field] = var
         self._stick_mode = ttk.StringVar(value=self._draft.get("stick_mode", "4dir"))
         ttk.Combobox(parent, textvariable=self._stick_mode, values=("4dir", "8dir"), state="readonly", width=12).pack(anchor="w", pady=8)
         for label, command in (("导入配置", self._import), ("导出当前配置", self._export), ("备份已保存配置", self._backup)):
@@ -230,6 +237,8 @@ class SettingsWindow:
         for field, var in self._params.items():
             candidate[field] = float(var.get())
         candidate["stick_mode"] = self._stick_mode.get()
+        for field, var in self._stick_inversions.items():
+            candidate[field] = var.get()
         errors = validate_config(candidate) + validate_devices(candidate.get("device_profiles", {}))
         if errors:
             raise ValueError("\n".join(errors))
@@ -243,7 +252,7 @@ class SettingsWindow:
             messagebox.showerror("配置错误", str(error), parent=self._win)
             return
         def apply():
-            runtime = {k: self._config[k] for k in ("runtime_devices", "device_identity") if k in self._config}
+            runtime = {k: self._config[k] for k in ("runtime_devices", "device_identity", "runtime_status") if k in self._config}
             self._config.clear()
             self._config.update(candidate)
             self._config.update(runtime)

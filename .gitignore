@@ -31,3 +31,6 @@ config/backups/
 .pytest_cache/
 .ruff_cache/
 build-packaging.log
+*.log
+Library/
+work/

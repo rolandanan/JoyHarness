@@ -34,6 +34,8 @@ if __package__ is None:
 # With this set, both Joy-Cons remain independent Joystick devices and
 # hidapi can concurrently read battery reports from each one.
 os.environ.setdefault("SDL_JOYSTICK_HIDAPI_COMBINE_JOY_CONS", "0")
+# The mapper has no SDL window/focus; input must continue in other applications.
+os.environ.setdefault("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1")
 
 # macOS: prevent SDL2 from installing its NSApplication subclass.
 # SDLApplication doesn't implement -macOSVersion, which Tk 9.0+ calls,
@@ -141,7 +143,7 @@ Examples:
         help="List all control names and current mappings, then exit",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose", "--debug", "-v",
         action="store_true",
         help="Enable debug logging",
     )
@@ -194,7 +196,7 @@ def main() -> None:
         log_path = Path(USER_CONFIG_PATH).parent / "joyharness.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
         handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
-    if args.verbose:
+    if args.verbose and not getattr(sys, "frozen", False):
         log_path = Path(__file__).resolve().parent.parent / "nsjc.log"
         handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
     logging.basicConfig(
@@ -258,6 +260,8 @@ def main() -> None:
     profile_mappings = profile.get("mappings", config.get("mappings", {}))
     config["mappings"] = profile_mappings
     config["active_profile"] = connection_mode
+    config["runtime_status"] = {"state": "未启动", "error": "", "last_input": ""}
+    config["_joystick_update_only"] = sys.platform == "darwin"
 
     from .constants import MODE_LABELS
     profile_label = MODE_LABELS.get(connection_mode, connection_mode)
@@ -267,10 +271,13 @@ def main() -> None:
     # Restore KNOWN_APPS from saved config
     from .window_switcher import set_known_apps
     known_apps = config.get("known_apps")
-    if known_apps:
+    if known_apps is not None:
         set_known_apps(known_apps)
 
     key_mapper = KeyMapper(config, mode=connection_mode)
+    from . import keyboard_output
+    if not args.smoke_test:
+        keyboard_output.start_output_worker(config["runtime_status"])
     stop_event = threading.Event()
 
     # Initialize WindowCycler with selected apps from config
@@ -294,7 +301,6 @@ def main() -> None:
         keep_alive_manager=keep_alive_manager,
     )
     key_mapper.set_tk_root(gui.root)
-
     # Start polling loop in background thread (after GUI so callback is available)
     poll_thread = threading.Thread(
         target=_run_polling,
@@ -328,21 +334,22 @@ def main() -> None:
     else:
         print("GUI and tray active. Close window or right-click tray to quit.")
 
-    # Run GUI in main thread (blocks until window closed)
-    gui.run()
-
-    # Cleanup
-    stop_event.set()
-    if icon is not None:
-        icon.stop()
-    if poll_thread.ident is not None:
-        poll_thread.join(timeout=2.0)
-    battery_reader.join(timeout=2.0)
-    keep_alive_manager.join(timeout=2.0)
-    key_mapper.release_all()
-    pygame.joystick.quit()
-    pygame.display.quit()
-    print("Clean exit. All keys released.")
+    # Always release keys and stop workers, including GUI failures.
+    try:
+        gui.run()
+    finally:
+        stop_event.set()
+        if icon is not None:
+            icon.stop()
+        if poll_thread.ident is not None:
+            poll_thread.join(timeout=2.0)
+        battery_reader.join(timeout=2.0)
+        keep_alive_manager.join(timeout=2.0)
+        key_mapper.release_all()
+        keyboard_output.stop_output_worker()
+        pygame.joystick.quit()
+        pygame.display.quit()
+        print("Clean exit. All keys released.")
 
 
 def _run_polling(
@@ -356,7 +363,8 @@ def _run_polling(
     try:
         from .controller_runtime import run_controllers
         run_controllers(key_mapper, config, stop_event, on_mode_change=on_mode_change)
-    except Exception:
+    except Exception as error:
+        config.setdefault("runtime_status", {}).update(state="轮询异常", error=f"{type(error).__name__}: {error}")
         logger.exception("Polling thread error")
 
 

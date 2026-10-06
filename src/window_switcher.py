@@ -12,16 +12,33 @@ from typing import NamedTuple
 
 logger = logging.getLogger(__name__)
 
-KNOWN_APPS: dict[str, str] = {
-    "VS Code": "code.exe" if sys.platform == "win32" else "Code",
-    "飞书": "feishu.exe" if sys.platform == "win32" else "Lark",
-}
+KNOWN_APPS: dict[str, str] = {}
 
 
 def set_known_apps(apps: dict[str, str]) -> None:
     """Replace the known apps dict atomically."""
     KNOWN_APPS.clear()
     KNOWN_APPS.update(apps)
+
+
+def running_apps() -> dict[str, str]:
+    """Use window-owner names so scanned targets match enumeration exactly."""
+    if sys.platform == "darwin":
+        from AppKit import NSWorkspace
+        from Quartz import CGWindowListCopyWindowInfo, kCGWindowListOptionAll, kCGNullWindowID
+        windows = CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID) or []
+        owners = {int(w.get("kCGWindowOwnerPID", 0)): str(w["kCGWindowOwnerName"])
+                  for w in windows if w.get("kCGWindowLayer") == 0 and w.get("kCGWindowOwnerName")}
+        result = {}
+        for app in NSWorkspace.sharedWorkspace().runningApplications():
+            if app.activationPolicy() != 0 or not app.localizedName():
+                continue
+            executable = app.executableURL()
+            result[str(app.localizedName())] = owners.get(app.processIdentifier()) or (
+                str(executable.lastPathComponent()) if executable else str(app.localizedName()))
+        return result
+    return {window.app_name: window.app_name for window in find_windows(None)
+            if window.app_name}
 
 
 class WindowInfo(NamedTuple):
@@ -128,6 +145,7 @@ elif sys.platform == "darwin":
         from Quartz import (  # type: ignore
             CGWindowListCopyWindowInfo,
             kCGWindowListOptionOnScreenOnly,
+            kCGWindowListOptionAll,
             kCGWindowListExcludeDesktopElements,
             kCGNullWindowID,
         )
@@ -183,7 +201,10 @@ elif sys.platform == "darwin":
     def _find_windows_quartz(app_names: list[str] | None) -> list[WindowInfo]:
         """Enumerate on-screen windows via Quartz. WindowInfo.hwnd is the owner PID."""
         results: list[WindowInfo] = []
-        opts = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements
+        opts = kCGWindowListOptionAll | kCGWindowListExcludeDesktopElements
+        targets = None if app_names is None else set(app_names)
+        if targets is not None:
+            targets.update(process for display, process in running_apps().items() if display in app_names)
         windows = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) or []
         for w in windows:
             # Layer 0 = normal app windows; non-zero = menubar, dock, panels, etc.
@@ -198,7 +219,7 @@ elif sys.platform == "darwin":
                 # Some apps (e.g. Chrome incognito, certain Electron apps) hide titles
                 # from CGWindowList for privacy. Fall back to the app name.
                 title = owner
-            if app_names is not None and owner not in app_names:
+            if targets is not None and owner not in targets:
                 continue
             results.append(WindowInfo(pid, str(title), str(owner)))
         return results

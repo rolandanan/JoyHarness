@@ -33,15 +33,15 @@
       "R": {
         "action": "combination",
         "keys": [
-          "control",
-          "q"
+          "command",
+          "s"
         ]
       },
       "ZR": {
         "action": "combination",
         "keys": [
-          "option",
-          "a"
+          "command",
+          "f"
         ]
       },
       "Plus": {
@@ -93,12 +93,7 @@
       }
     }
   },
-  "known_apps": {
-    "Ghostty": "Ghostty",
-    "微信": "微信",
-    "飞书": "飞书",
-    "反重力": "Antigravity"
-  },
+  "known_apps": {},
   "selected_apps": [],
   "profiles": {
     "single_right": {
@@ -129,15 +124,15 @@
           "R": {
             "action": "combination",
             "keys": [
-              "control",
-              "q"
+              "command",
+              "s"
             ]
           },
           "ZR": {
             "action": "combination",
             "keys": [
-              "option",
-              "a"
+              "command",
+              "f"
             ]
           },
           "Plus": {
@@ -290,16 +285,18 @@
             ]
           },
           "R": {
-            "action": "exec",
-            "command": [
-              "open",
-              "-a",
-              "Mission Control"
+            "action": "combination",
+            "keys": [
+              "command",
+              "s"
             ]
           },
           "ZR": {
-            "action": "hold",
-            "key": "alt_r"
+            "action": "combination",
+            "keys": [
+              "command",
+              "f"
+            ]
           },
           "L": {
             "action": "hold",
@@ -377,5 +374,6 @@
     }
   },
   "active_profile": "single_right",
-  "theme": "litera"
+  "theme": "litera",
+  "device_profiles": {}
 }

@@ -12,10 +12,58 @@ from __future__ import annotations
 import sys
 import time
 import logging
+import queue
+import threading
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
 _held_keys: set[str] = set()
+_output_queue = queue.Queue()
+_output_thread = None
+
+
+def start_output_worker(status):
+    """Keep OS injection delays out of the controller input sampling thread."""
+    global _output_thread
+    if _output_thread is not None and _output_thread.is_alive():
+        return
+    def run():
+        while True:
+            item = _output_queue.get()
+            try:
+                if item is None:
+                    return
+                function, args, kwargs = item
+                function(*args, **kwargs)
+            except Exception as error:
+                status.update(state="按键发送异常", error=f"{type(error).__name__}: {error}")
+                logger.exception("Keyboard output failed")
+            finally:
+                _output_queue.task_done()
+    _output_thread = threading.Thread(target=run, name="keyboard-output", daemon=True)
+    _output_thread.start()
+
+
+def stop_output_worker():
+    global _output_thread
+    if _output_thread is not None:
+        _output_queue.put(None)
+        _output_thread.join(timeout=3)
+        if _output_thread.is_alive():
+            logger.error("Keyboard output worker did not stop within timeout")
+        else:
+            _output_thread = None
+
+
+def _serialized(function):
+    @wraps(function)
+    def call(*args, **kwargs):
+        if _output_thread is not None and threading.current_thread() is not _output_thread:
+            _output_queue.put((function, args, kwargs))
+        else:
+            return function(*args, **kwargs)
+    return call
 
 
 def _windows_key(key_name):
@@ -159,6 +207,7 @@ else:
 # Public API (unchanged interface)
 # ---------------------------------------------------------------------------
 
+@_serialized
 def press(key: str) -> None:
     """Hold a key down. No-op if already held."""
     if key in _held_keys:
@@ -168,6 +217,7 @@ def press(key: str) -> None:
     logger.debug("pressed: %s", key)
 
 
+@_serialized
 def release(key: str) -> None:
     """Release a held key. No-op if not currently held."""
     if key not in _held_keys:
@@ -177,6 +227,7 @@ def release(key: str) -> None:
     logger.debug("released: %s", key)
 
 
+@_serialized
 def tap(key: str, duration: float = 0.02) -> None:
     """Press and release a key immediately.
 
@@ -199,6 +250,7 @@ def tap(key: str, duration: float = 0.02) -> None:
     logger.debug("tapped: %s (was_held=%s)", key, was_held)
 
 
+@_serialized
 def send_combination(keys: list[str], hold: float = 0.05) -> None:
     """Press multiple keys simultaneously, then release in reverse order.
 
@@ -232,6 +284,7 @@ def send_combination(keys: list[str], hold: float = 0.05) -> None:
     logger.debug("combination: %s", "+".join(keys))
 
 
+@_serialized
 def release_all() -> None:
     """Release every currently held key. Used for cleanup on exit or disconnect."""
     for key in list(_held_keys):
@@ -245,6 +298,7 @@ def is_held(key: str) -> bool:
     return key in _held_keys
 
 
+@_serialized
 def type_text(text: str) -> None:
     """Type a string."""
     _do_type_text(text)

@@ -1,8 +1,14 @@
-# JoyHarness
+# JoyHarness v1.2.0
 
 把 Nintendo Switch Joy-Con 变成桌面快捷键控制器。支持 macOS 与 Windows、单左 / 单右 / 双手柄、设备校准、窗口切换和可编辑工作流。
 
 本仓库基于 [VaderCheng/JoyHarness](https://github.com/VaderCheng/JoyHarness) 二次开发，保留原作者版权声明与 [MIT License](LICENSE)。本次审计与改造清单见 [docs/AUDIT.md](docs/AUDIT.md)。
+
+![macOS 工作台](assets/screenshot-mac.png)
+
+## 下载
+
+[GitHub Releases](https://github.com/rolandanan/JoyHarness/releases)：Apple Silicon 下载 `JoyHarness-macOS-arm64.zip` 或 DMG；Windows 下载 x64 ZIP。Intel Mac 尚未构建或验证。macOS 包只有 ad-hoc 签名，**没有 Developer ID 签名、没有 Apple 公证**。首次打开若被拦截，在系统设置 → 隐私与安全性中确认来源后选择“仍要打开”。
 
 ## 主要功能
 
@@ -80,23 +86,11 @@ python -m venv .venv
 
 **ZR 在正确校准、驱动暴露该按钮的设备上可用。SL / SR 也可自定义；可用性取决于驱动输入，不能笼统称为“不稳定”或“不可用”。** 左手柄与组合设备预设索引仍为回退值，建议首次使用完成校准。
 
-### 本机已验证右手柄索引与 macOS 预设
+### 公共 macOS 默认
 
-| 按钮 | SDL 索引 | 动作 |
-|---|---:|---|
-| A | 0 | Enter |
-| X | 1 | ⌘ C 复制 |
-| B | 2 | Esc |
-| Y | 3 | ⌘ V 粘贴 |
-| Home | 5 | ⌘ Z 撤销 |
-| Plus | 6 | ⌘ A 全选 |
-| SL | 9 | 保留 Command hold，可自定义 |
-| SR | 10 | window_switch |
-| R | 12 | ⌃ Q（闪电说，需该应用设置对应快捷键） |
-| ZR | 14 | ⌥ A（iShot，需该应用设置对应快捷键） |
-| 摇杆 | X=1 / Y=0 | 上下左右，100ms 连发 |
+A / B 为 Enter / Esc，X / Y 为复制 / 粘贴，R / ZR 为保存 / 查找，Plus / Home 为全选 / 撤销，SR 为窗口切换。应用目标列表默认空，可自行添加或扫描。
 
-这些值保留了用户实测结果，但并非所有设备通用。实体键映射在设备配置，快捷键动作在 profile，二者分别保存。
+物理索引仅提供 SDL 回退，不代表任何设备的保证映射。首次使用应校准按钮和轴；校准按平台、GUID、设备名称持久化，不会覆盖其他设备。
 
 ## 动作说明
 
@@ -128,7 +122,7 @@ python -m venv .venv
 
 ## 配置、备份与项目结构
 
-源码优先 `config/user.json`，其次平台预设，最后内置默认。打包版本个人配置：
+启动优先读取应用数据目录的个人配置，其次源码 `config/user.json`，再读取平台预设与内置默认。公共预设不会被保存操作覆盖。打包版本个人配置：
 
 - macOS：`~/Library/Application Support/JoyHarness/user.json`
 - Windows：`%APPDATA%\JoyHarness\user.json`
@@ -163,7 +157,7 @@ python -m src --smoke-test
 
 旧 `tests/test_headless.py` / battery / reconnect 等是需要真实手柄的手动诊断工具；`tests/test_core.py` 与后续自动化用例不发送真实键盘事件。
 
-macOS HID 被 SDL 或驱动占用时，电量会显示“电量不可用”；keep-alive 也可能无法发送。不会强行抢占设备或停止其他程序。双手柄与 Windows 逻辑经过自动化验证，仍需对应实体硬件 / 系统实测。测试快捷键派发不等于闪电说、iShot 的实际响应或真实物理按键测试。
+macOS HID 被 SDL 或驱动占用时，电量会显示“电量不可用”；keep-alive 也可能无法发送。不会强行抢占设备或停止其他程序。双手柄与 Windows 逻辑经过自动化验证，仍需对应实体硬件 / 系统实测。自动化派发测试不能替代真实物理按键和目标应用验证。
 
 ## 致谢与许可证
 

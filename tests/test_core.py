@@ -19,7 +19,7 @@ def config():
     config = load_config(str(ROOT / 'config/user-macos.json'))
     from src.hardware_defaults import BUTTON_INDICES
     config['device_identity'] = 'verified-test-device'
-    config['device_profiles'] = {'verified-test-device': {'buttons': {'single_right': dict(BUTTON_INDICES)}}}
+    config['device_profiles'] = {'verified-test-device': {'buttons': {'single_right': dict(BUTTON_INDICES, A=0, X=1, B=2, Y=3, R=12, ZR=14)}}}
     return config
 
 
@@ -36,7 +36,7 @@ def test_verified_indices(config, name, index):
     assert button_indices(config, 'single_right')[name] == index
 
 
-@pytest.mark.parametrize('name,method,target', [('R','send_combination',['control','q']),('ZR','send_combination',['option','a']),('A','tap','enter'),('B','tap','escape'),('X','send_combination',['command','c']),('Y','send_combination',['command','v']),('Plus','send_combination',['command','a']),('Home','send_combination',['command','z'])])
+@pytest.mark.parametrize('name,method,target', [('R','send_combination',['command','s']),('ZR','send_combination',['command','f']),('A','tap','enter'),('B','tap','escape'),('X','send_combination',['command','c']),('Y','send_combination',['command','v']),('Plus','send_combination',['command','a']),('Home','send_combination',['command','z'])])
 def test_verified_shortcuts(config, output, name, method, target):
     mapper = KeyMapper(config)
     index = mapper._button_indices[name]
@@ -113,7 +113,7 @@ def test_device_override_isolated(config):
     config['device_profiles'] = {'device1': {'buttons': {'single_right': {'R': 8}}}}
     assert button_indices(config, 'single_right', 'device1')['R'] == 8
     import sys
-    assert button_indices(config, 'single_right', 'device2')['R'] == (16 if sys.platform == 'win32' else 12)
+    assert button_indices(config, 'single_right', 'device2')['R'] == 16
     assert validate_devices({'a': {'buttons': {'single_right': {'A':0,'B':0}}}})
 
 
@@ -195,6 +195,8 @@ def test_runtime_dual_and_calibrated_input(config, output, monkeypatch):
             self.side = side
         def get_name(self):
             return f'Joy-Con ({self.side})'
+        def init(self):
+            pass
         def get_guid(self):
             return self.side
         def get_instance_id(self):
@@ -217,12 +219,38 @@ def test_runtime_dual_and_calibrated_input(config, output, monkeypatch):
     monkeypatch.setattr(runtime.pygame.joystick, 'get_count', lambda: 2)
     monkeypatch.setattr(runtime.pygame.joystick, 'Joystick', lambda index: devices[index])
     config['device_profiles'] = {f'{sys.platform}:R:Joy-Con (R)': {'buttons': {'single_right': {'R':8}}}}
-    config['profiles']['dual']['mappings']['buttons']['R'] = {'action':'combination','keys':['control','q']}
+    config['profiles']['dual']['mappings']['buttons']['R'] = {'action':'combination','keys':['command','s']}
     config['profiles']['dual']['mappings']['buttons']['SR_R'] = {'action':'window_switch'}
     mapper = KeyMapper(config)
     mapper._window_cycler.next = Mock()
     runtime.run_controllers(mapper, config, stop)
     assert config['active_profile'] == 'dual'
     assert len(config['runtime_devices']) == 2
-    assert ('send_combination', (['control','q'],)) in output
+    assert ('send_combination', (['command','s'],)) in output
     mapper._window_cycler.next.assert_called_once()
+
+
+def test_public_preset_saves_to_personal_file(tmp_path, monkeypatch):
+    import src.config_loader as loader
+    preset = ROOT / 'config/user-macos.json'
+    before = preset.read_bytes()
+    destination = tmp_path / 'user.json'
+    monkeypatch.setattr(loader, 'USER_CONFIG_PATH', str(destination))
+    config = loader.load_config(str(preset))
+    assert config['_save_path'] == str(destination)
+    assert config['known_apps'] == {}
+    assert config.get('device_profiles', {}) == {}
+    loader.save_config(config)
+    assert destination.exists()
+    assert preset.read_bytes() == before
+
+
+def test_nonstandard_device_calibration_survives_save(tmp_path):
+    identity = 'test-platform:test-guid:test-device'
+    config = load_config(str(ROOT / 'config/user-macos.json'))
+    config['device_profiles'] = {identity: {'buttons': {'single_right': {'A': 8, 'R': 4, 'ZR': 11}}}}
+    config['_save_path'] = str(tmp_path / 'user.json')
+    save_config(config)
+    restored = load_config(config['_save_path'])
+    indices = button_indices(restored, 'single_right', identity)
+    assert (indices['A'], indices['R'], indices['ZR']) == (8, 4, 11)

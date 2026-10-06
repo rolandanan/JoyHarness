@@ -114,14 +114,14 @@ def run_discover_mode(joystick_index: int | None = None) -> None:
     mode = detect_connection_mode()
     btn_names = BUTTON_NAMES_BY_MODE.get(mode, BUTTON_NAMES)
 
-    print(f"\n=== Discovery Mode ===")
+    print("\n=== Discovery Mode ===")
     print(f"Controller: {js.get_name()}")
     print(f"GUID: {js.get_guid()}")
     print(f"Buttons: {js.get_numbuttons()}")
     print(f"Axes: {js.get_numaxes()}")
     print(f"Connection mode: {mode}")
-    print(f"\nPress buttons and move sticks to see their indices.")
-    print(f"Press Ctrl+C to exit.\n")
+    print("\nPress buttons and move sticks to see their indices.")
+    print("Press Ctrl+C to exit.\n")
 
     clock = pygame.time.Clock()
     prev_buttons: set[int] = set()
@@ -302,6 +302,9 @@ def run_polling_loop(
             # --- Stick polling ---
             raw_x = joystick.get_axis(axis_x) - baseline_x
             raw_y = joystick.get_axis(axis_y) - baseline_y
+            if current_mode != "single_left":
+                raw_x *= -1 if config.get("right_stick_invert_x", False) else 1
+                raw_y *= -1 if config.get("right_stick_invert_y", False) else 1
             filt_x, filt_y = apply_deadzone(raw_x, raw_y, deadzone)
             direction = get_direction(filt_x, filt_y, stick_mode)
 

@@ -22,7 +22,14 @@ def test_workbench_editor_and_settings(tmp_path):
     try:
         gui.root.update()
         gui._refresh_status()
-        assert len(gui._mapping_table.get_children()) == 11
+        assert len(gui._mapping_table.get_children()) == 15
+        for direction in ("up", "down", "left", "right"):
+            assert gui._mapping_table.exists(f"stick:{direction}")
+        gui._mapping_table.selection_set('stick:up')
+        gui._edit_selected()
+        stick_editor = next(w for w in gui.root.winfo_children() if w.winfo_class() == 'Toplevel' and w.title() == '自定义 摇杆 up')
+        assert stick_editor.winfo_viewable()
+        stick_editor.destroy()
         assert str(gui._mapping_table.column('target', 'anchor')) == 'center'
         assert int(gui.root.style.lookup('Workflow.Treeview', 'rowheight')) == 26
         gui._switch_button.set('RStick')
@@ -50,6 +57,36 @@ def test_workbench_editor_and_settings(tmp_path):
         gui._configure_styles()
         gui.root.update()
         assert gui.root.style.lookup('Muted.TLabel', 'foreground') == '#cbd5e1'
+    finally:
+        stop.set()
+        gui.root.destroy()
+
+
+def test_mouse_clicks_open_visible_parented_dialogs(tmp_path):
+    from src.config_loader import load_config
+    from src.key_mapper import KeyMapper
+    from src.gui import MainWindow
+    config = load_config(str(Path(__file__).resolve().parents[1] / 'config/user-macos.json'))
+    config['_save_path'] = str(tmp_path / 'user.json')
+    mapper = KeyMapper(config)
+    stop = threading.Event()
+    gui = MainWindow(mapper, mapper._window_cycler, config, stop)
+    def descendants(widget):
+        for child in widget.winfo_children():
+            yield child
+            yield from descendants(child)
+    try:
+        gui.root.update()
+        for label, title in [('添加应用', '添加应用'), ('扫描运行应用', '选择运行应用 · 双击添加'), ('设置与校准', 'JoyHarness · 设置')]:
+            button = next(w for w in descendants(gui.root) if w.winfo_class() == 'TButton' and w.cget('text') == label)
+            button.event_generate('<Enter>', x=10, y=10)
+            button.event_generate('<ButtonPress-1>', x=10, y=10)
+            button.event_generate('<ButtonRelease-1>', x=10, y=10)
+            gui.root.update()
+            dialog = next(w for w in gui.root.winfo_children() if w.winfo_class() == 'Toplevel' and w.title() == title)
+            assert dialog.winfo_viewable()
+            assert str(dialog.transient()) == str(gui.root)
+            dialog.destroy()
     finally:
         stop.set()
         gui.root.destroy()

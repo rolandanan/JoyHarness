@@ -45,7 +45,7 @@ class MappingEditor:
     def __init__(self, parent, button, mapping, on_save):
         self.mapping = copy.deepcopy(mapping)
         self.on_save = on_save
-        self.win = ttk.Toplevel(parent)
+        self.win = ttk.Toplevel(master=parent)
         self.win.title(f"自定义 {button}")
         self.win.geometry("620x490")
         self.win.minsize(580, 440)

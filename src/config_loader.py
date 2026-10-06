@@ -43,6 +43,12 @@ def get_platform_config_path() -> str | None:
     2. user-macos.json (macOS) or user-windows.json (Windows)
     """
     import sys
+    # Source and packaged launches should reopen the same saved workflow.
+    shared_dir = (Path.home() / "Library/Application Support/JoyHarness" if sys.platform == "darwin"
+                  else Path(os.environ.get("APPDATA", str(Path.home()))) / "JoyHarness")
+    shared = shared_dir / "user.json"
+    if shared.exists():
+        return str(shared)
     user = _CONFIG_DIR / "user.json"
     if user.exists():
         return str(user)
@@ -90,7 +96,8 @@ def load_config(path: str | None = None) -> dict:
     if errors:
         error_msg = "Invalid configuration:\n" + "\n".join(f"  - {e}" for e in errors)
         raise ValueError(error_msg)
-    merged["_save_path"] = USER_CONFIG_PATH if getattr(sys, "frozen", False) and config_path.parent == _BUNDLED_CONFIG_DIR else str(config_path)
+    # Public presets are read-only templates, including source launches.
+    merged["_save_path"] = USER_CONFIG_PATH if config_path.parent == _BUNDLED_CONFIG_DIR and config_path.name != "user.json" else str(config_path)
     return merged
 
 
@@ -127,7 +134,7 @@ def merge_with_defaults(user_config: dict) -> dict:
     result = copy.deepcopy(DEFAULT_CONFIG)
 
     # Override top-level settings
-    for key in ("version", "description", "deadzone", "poll_interval", "stick_mode", "stick_enabled", "keep_alive_enabled", "device_profiles", "long_press_threshold", "axis_x", "axis_y", "theme"):
+    for key in ("version", "description", "deadzone", "poll_interval", "stick_mode", "stick_enabled", "keep_alive_enabled", "device_profiles", "long_press_threshold", "axis_x", "axis_y", "theme", "stick_repeat_delay", "right_stick_invert_x", "right_stick_invert_y"):
         if key in user_config:
             result[key] = user_config[key]
 
@@ -234,6 +241,12 @@ def validate_config(config: dict) -> list[str]:
             errors.append(f"{field} 必须为正数")
 
     # Top-level validation
+    delay = config.get("stick_repeat_delay", 400)
+    if type(delay) not in (int, float) or not 0 <= delay <= 10000:
+        errors.append("stick_repeat_delay 必须为 0–10000 毫秒")
+    for field in ("right_stick_invert_x", "right_stick_invert_y"):
+        if type(config.get(field, False)) is not bool:
+            errors.append(f"{field} 必须为布尔值")
     deadzone = config.get("deadzone", 0.15)
     if not isinstance(deadzone, (int, float)) or not (0.0 <= deadzone < 1.0):
         errors.append(f"deadzone must be between 0.0 and 0.99, got {deadzone}")
@@ -366,6 +379,8 @@ def save_config(config: dict, path: str | None = None) -> None:
     payload = copy.deepcopy(config)
     payload.pop("device_identity", None)
     payload.pop("runtime_devices", None)
+    payload.pop("runtime_status", None)
+    payload.pop("_joystick_update_only", None)
     payload.pop("_save_path", None)
     temporary = target.with_suffix(".tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
