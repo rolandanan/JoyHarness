@@ -122,6 +122,7 @@ class MainWindow(ResizableMixin):
         self._login_var = ttk.BooleanVar(value=is_enabled())
         for label, variable, command in (("摇杆映射", self._stick_var, self._on_stick_toggle), ("保持手柄唤醒", self._keep_alive_var, self._on_keep_alive_toggle), ("登录时自动启动", self._login_var, self._on_login_toggle)):
             ttk.Checkbutton(options, text=label, variable=variable, command=command, bootstyle="success-round-toggle").pack(side=LEFT, padx=8, pady=4)
+        ttk.Button(options, text="暂停 / 恢复映射", command=lambda: self.controller.toggle_pause(), bootstyle="secondary-outline").pack(side=LEFT, padx=4)
         self._theme_var = ttk.StringVar(value={"darkly": "深色", "litera": "浅色"}.get(self._config.get("theme"), "跟随系统"))
         theme = ttk.Combobox(options, textvariable=self._theme_var, values=("跟随系统", "浅色", "深色"), state="readonly", width=7)
         theme.pack(side=LEFT, padx=8, pady=4)
@@ -201,7 +202,11 @@ class MainWindow(ResizableMixin):
             state = "权限缺失 · 请允许辅助功能后重启" if sys.platform == "darwin" else "权限不足 · 部分应用需要管理员权限"
         elif state == "输入监听中" and sys.platform == "darwin" and input_monitoring_status() is False:
             state = "输入监控待授权 · 可在下方打开系统设置"
-        self._runtime_label.configure(text=f"输入监听：{state}  {runtime.get('error', '')}")
+        from .autostart import is_enabled
+        self._login_var.set(is_enabled())
+        paused = getattr(getattr(self, "controller", None), "paused", False)
+        prefix = "映射暂停" if paused else "后台运行中"
+        self._runtime_label.configure(text=f"{prefix} · 输入监听：{state}  {runtime.get('error', '')}")
         self._input_label.configure(text=runtime.get("last_input") or "等待手柄输入…")
         devices = self._config.get("runtime_devices", [])
         self._device_status.configure(text=" · ".join(d["name"] for d in devices) or "未连接 · 请在蓝牙设置连接 Joy-Con")
@@ -538,11 +543,14 @@ class MainWindow(ResizableMixin):
         )
 
     def _on_close(self) -> None:
-        """Handle window close — exit the program."""
-        logger.info("Main window closed, stopping...")
-        save_config(self._config)
-        self._stop_event.set()
-        self._root.destroy()
+        """Hide macOS settings without stopping the backend."""
+        if sys.platform == "darwin":
+            self._root.withdraw()
+        elif hasattr(self, "controller"):
+            self.controller.shutdown()
+        else:
+            self._stop_event.set()
+            self._root.destroy()
 
     @property
     def root(self) -> ttk.Window:

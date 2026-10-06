@@ -382,6 +382,7 @@ def save_config(config: dict, path: str | None = None) -> None:
     payload.pop("runtime_status", None)
     payload.pop("_joystick_update_only", None)
     payload.pop("_save_path", None)
+    payload.pop("_mapping_paused", None)
     temporary = target.with_suffix(".tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     temporary.replace(target)

@@ -53,7 +53,6 @@ from .joycon_reader import find_joycon, detect_connection_mode, run_discover_mod
 from .keep_alive import KeepAliveManager
 from .key_mapper import KeyMapper
 from .app_platform.permission import has_required_permissions, get_permission_warning
-from .tray_icon import create_tray_icon, run_tray
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +151,7 @@ Examples:
         action="version",
         version=f"NSJC {__import__('src.constants', fromlist=['__version__']).__version__}",
     )
+    parser.add_argument("--background", action="store_true", help="Start in the menu bar")
     parser.add_argument("--smoke-test", action="store_true", help="Open GUI briefly and exit without writing configuration or sending keys")
     parser.add_argument(
         "--no-admin-warn",
@@ -205,6 +205,9 @@ def main() -> None:
         datefmt="%H:%M:%S",
         handlers=handlers,
     )
+
+    from .autostart import upgrade_background_launcher
+    upgrade_background_launcher()
 
     # Permission check
     if not args.no_admin_warn and not has_required_permissions():
@@ -307,38 +310,55 @@ def main() -> None:
         args=(js, key_mapper, config, stop_event, gui.update_connection_mode),
         daemon=True,
     )
+    from .app_controller import AppController
+    controller = AppController(gui, key_mapper, config, stop_event)
+    gui.controller = controller
+    if sys.platform == "darwin":
+        gui.root.createcommand("tk::mac::Quit", controller.shutdown)
+    import signal
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, lambda *_: gui.root.after(0, controller.shutdown))
     if not args.smoke_test:
-        poll_thread.start()
+        controller.start(poll_thread)
     else:
         def finish_smoke():
-            stop_event.set()
-            gui.root.destroy()
+            if sys.platform == "darwin":
+                gui._on_close()
+                assert not stop_event.is_set()
+                assert gui.root.state() == "withdrawn"
+                assert menu_bar.item.button().title() == "JH"
+                menu_bar.show()
+                assert not stop_event.is_set()
+                assert gui.root.state() == "normal"
+                quit_item = menu_bar.menu.itemAtIndex_(menu_bar.menu.numberOfItems() - 1)
+                menu_bar.actions.invoke_(quit_item)
+                logger.info("Lifecycle smoke passed: hide, menu item, reopen, native Quit action")
+            else:
+                controller.shutdown()
         gui.root.after(400, gui._open_settings)
         gui.root.after(800, gui._edit_selected)
         gui.root.after(2000, finish_smoke)
 
-    # Start tray icon in background thread (Windows only)
-    # macOS: pystray requires NSApplication.run on the main thread, which
-    # conflicts with tkinter's mainloop. Since macOS has Dock + Cmd+Tab for
-    # app switching, the tray icon is not essential. Skipping it avoids a
-    # 99% CPU spin caused by NSApplication threading violations.
     icon = None
-    tray_thread = None
-    if sys.platform != "darwin":
-        icon = create_tray_icon(stop_event, on_show_window=gui.show)
-        tray_thread = threading.Thread(target=run_tray, args=(icon,), daemon=True)
-        tray_thread.start()
-
+    menu_bar = None
     if sys.platform == "darwin":
-        print("GUI active. Close window to quit.")
+        from .macos_menu import MacMenuBar
+        menu_bar = MacMenuBar(controller)
+        if args.background:
+            gui.root.withdraw()
     else:
-        print("GUI and tray active. Close window or right-click tray to quit.")
+        from .tray_icon import create_tray_icon, run_tray
+        icon = create_tray_icon(stop_event, on_show_window=gui.show)
+        threading.Thread(target=run_tray, args=(icon,), daemon=True).start()
+    print("JoyHarness running in the macOS menu bar.")
 
     # Always release keys and stop workers, including GUI failures.
     try:
         gui.run()
     finally:
         stop_event.set()
+        if menu_bar is not None:
+            menu_bar.stop()
         if icon is not None:
             icon.stop()
         if poll_thread.ident is not None:

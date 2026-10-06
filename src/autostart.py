@@ -16,8 +16,8 @@ def launcher_path():
 
 def launch_arguments():
     if getattr(sys, "frozen", False):
-        return [sys.executable]
-    return [sys.executable, "-m", "src"]
+        return [sys.executable] + (["--background"] if sys.platform == "darwin" else [])
+    return [sys.executable, "-m", "src"] + (["--background"] if sys.platform == "darwin" else [])
 
 
 def is_enabled():
@@ -44,3 +44,18 @@ def set_enabled(enabled):
         target.write_text(f'Set s = CreateObject("WScript.Shell")\ns.CurrentDirectory = "{root}"\ns.Run "{command}", 0, False\n', encoding="utf-8")
     else:
         raise OSError("当前平台不支持登录启动")
+
+
+def upgrade_background_launcher():
+    """Migrate only an already-enabled macOS login item, preserving its target."""
+    target = launcher_path()
+    if sys.platform != 'darwin' or not target.exists():
+        return
+    payload = plistlib.loads(target.read_bytes())
+    args = payload.get('ProgramArguments', [])
+    if args and '--background' not in args:
+        backup = target.with_suffix('.plist.before-background')
+        if not backup.exists():
+            backup.write_bytes(target.read_bytes())
+        payload['ProgramArguments'] = [*args, '--background']
+        target.write_bytes(plistlib.dumps(payload))

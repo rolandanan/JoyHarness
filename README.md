@@ -34,6 +34,12 @@ python3 -m venv .venv
 
 完成依赖安装后可双击 `start.command`，优先使用仓库 `.venv`。模块入口为 `python -m src`；直接 `python src/main.py` 也已修复标准库 `platform` 命名冲突。
 
+### 后台与菜单栏
+
+macOS 关闭主窗口只隐藏设置，手柄监听、摇杆、快捷键、窗口切换、电量与保持唤醒继续运行。菜单栏 `JH` 提供状态、电量、打开窗口、暂停/恢复、校准、登录启动和退出；Cmd+Q 也会退出并释放按键。重新打开窗口复用现有后台。
+
+登录启动使用已有 LaunchAgent，追加 `--background` 后不弹主窗口；已启用的旧配置会备份并迁移。源码也可运行 `python -m src --background`。暂停期间仍检测连接，但不输出映射；恢复后已按住的按钮需先释放再按。权限不足会在工作台显示提示。所有核心功能均在本机运行，无需互联网。
+
 ### 打包
 
 双击 `scripts/build-macos.command`，或：

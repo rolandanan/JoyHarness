@@ -97,6 +97,14 @@ def run_controllers(mapper, config, stop_event, on_mode_change=None):
                         d["blocked"].update(d["buttons"])
             except queue.Empty:
                 pass
+            if config.get('_mapping_paused', False):
+                for d in devices.values():
+                    current = {i for i in range(d['js'].get_numbuttons()) if d['js'].get_button(i)}
+                    d['buttons'] = current
+                    d['blocked'] = set(current)
+                    d['direction'] = None
+                stop_event.wait(max(.001, config.get('poll_interval', .01)))
+                continue
             for d in devices.values():
                 js = d["js"]
                 try:
