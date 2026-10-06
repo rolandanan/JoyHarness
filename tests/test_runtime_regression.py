@@ -157,13 +157,12 @@ def test_switch_binding_persists_and_reaches_mapper(tmp_path):
     assert config["mappings"]["buttons"]["R"] == {"action": "combination", "keys": ["command", "s"]}
 
 
-@pytest.mark.parametrize("config_path", ["config/user.json", "config/user-macos.json", None])
+@pytest.mark.parametrize("config_path", ["config/user-macos.json", "config/user-windows.json", None])
 @pytest.mark.parametrize("direction,axes", [("up", (0, -1)), ("down", (0, 1)), ("left", (-1, 0)), ("right", (1, 0))])
 def test_polling_stick_directions(monkeypatch, direction, axes, config_path, caplog):
     import logging
-    from src.config_loader import get_platform_config_path
     caplog.set_level(logging.DEBUG)
-    config = load_config(str(Path(__file__).parents[1] / config_path) if config_path else get_platform_config_path())
+    config = load_config(str(Path(__file__).parents[1] / config_path) if config_path else None)
     repeat_ms = config["mappings"]["stick_directions"][direction].get("repeat", 100)
     axes = (axes[0] * (-1 if config.get("right_stick_invert_x") else 1), axes[1] * (-1 if config.get("right_stick_invert_y") else 1))
     config["device_profiles"] = {f"{__import__('sys').platform}:test:Joy-Con (R)": {"buttons": {"single_right": {"A": 0, "X": 1, "B": 2, "Y": 3, "R": 12, "ZR": 14}}}}
@@ -206,7 +205,7 @@ def test_polling_stick_directions(monkeypatch, direction, axes, config_path, cap
 def test_stick_edit_persists_and_reaches_backend(tmp_path):
     import copy
     from src.gui import MainWindow
-    config = load_config(str(Path(__file__).parents[1] / "config/user.json"))
+    config = load_config(str(Path(__file__).parents[1] / "config/user-macos.json"))
     config["_save_path"] = str(tmp_path / "user.json")
     buttons = copy.deepcopy(config["mappings"]["buttons"])
     window = MainWindow.__new__(MainWindow)
@@ -222,7 +221,7 @@ def test_stick_edit_persists_and_reaches_backend(tmp_path):
 
 
 def test_stick_repeat_stops_when_centered(monkeypatch):
-    config = load_config(str(Path(__file__).parents[1] / "config/user.json"))
+    config = load_config(str(Path(__file__).parents[1] / "config/user-macos.json"))
     config["device_profiles"] = {f"{__import__('sys').platform}:test:Joy-Con (R)": {"buttons": {"single_right": {"A": 0, "X": 1, "B": 2, "Y": 3, "R": 12, "ZR": 14}}}}
     mapper = KeyMapper(config)
     sent = []
@@ -238,7 +237,7 @@ def test_stick_repeat_stops_when_centered(monkeypatch):
 
 
 def test_light_stick_touch_waits_before_repeat(monkeypatch):
-    config = load_config(str(Path(__file__).parents[1] / "config/user.json"))
+    config = load_config(str(Path(__file__).parents[1] / "config/user-macos.json"))
     config["stick_repeat_delay"] = 400
     config["mappings"]["stick_directions"]["up"]["repeat"] = 180
     now = [10.0]
@@ -267,7 +266,7 @@ def test_light_stick_touch_waits_before_repeat(monkeypatch):
 
 @pytest.mark.parametrize("action", ["hold", "auto"])
 def test_stick_hold_and_zero_repeat(monkeypatch, action):
-    config = load_config(str(Path(__file__).parents[1] / "config/user.json"))
+    config = load_config(str(Path(__file__).parents[1] / "config/user-macos.json"))
     config["mappings"]["stick_directions"]["up"] = {"action": action, "key": "up", "repeat": 0}
     config["device_profiles"] = {f"{__import__('sys').platform}:test:Joy-Con (R)": {"buttons": {"single_right": {"A": 0, "X": 1, "B": 2, "Y": 3, "R": 12, "ZR": 14}}}}
     mapper = KeyMapper(config)

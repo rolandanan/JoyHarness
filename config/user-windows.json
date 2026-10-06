@@ -90,12 +90,12 @@
     "stick_directions": {
       "up": {
         "action": "auto",
-        "key": "down",
+        "key": "up",
         "repeat": 100
       },
       "down": {
         "action": "auto",
-        "key": "up",
+        "key": "down",
         "repeat": 100
       },
       "left": {
@@ -205,12 +205,12 @@
         "stick_directions": {
           "up": {
             "action": "auto",
-            "key": "down",
+            "key": "up",
             "repeat": 100
           },
           "down": {
             "action": "auto",
-            "key": "up",
+            "key": "down",
             "repeat": 100
           },
           "left": {
